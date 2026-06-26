@@ -20,7 +20,7 @@ Ce serveur MCP est basé sur la librairie Python **[lbc](https://github.com/etie
 ## Installation
 
 ```bash
-git clone https://github.com/<votre-user>/leboncoin-mcp.git
+git clone https://github.com/wydii/leboncoin-mcp.git
 cd leboncoin-mcp
 
 python3 -m venv .venv
