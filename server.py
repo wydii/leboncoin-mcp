@@ -24,7 +24,7 @@ DEPARTMENT_MAP = {item.name: item for item in lbc.Department}
 
 def _ad_to_dict(ad: lbc.Ad) -> dict:
     attrs = {}
-    for a in ad.attributes:
+    for a in ad.attributes.values():
         label = a.key_label or a.key
         attrs[label] = a.value_label or a.value
 
