@@ -8,11 +8,27 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("leboncoin-mcp")
 
 mcp = FastMCP("leboncoin", instructions=(
-    "MCP server for searching Leboncoin (French classifieds). "
-    "Use search_ads to find listings, get_ad for details on a specific ad, "
-    "and get_user for seller info. "
-    "Locations can be a city (lat/lng/radius), a region name, or a department name. "
-    "Categories map to Leboncoin sections (VEHICULES, IMMOBILIER, ELECTRONIQUE, etc.)."
+    "MCP server to search and browse listings on Leboncoin, the largest French "
+    "classifieds marketplace (second-hand goods, real estate, vehicles, jobs, services).\n\n"
+    "Available tools:\n"
+    "- search_ads: find listings by keyword, category, location, price and more. "
+    "This is the main entry point; it returns a paginated list of ads with their id, "
+    "title, price, location and a short body.\n"
+    "- get_ad: fetch the full detail of one ad (all attributes, images, favorites) "
+    "using an ad id obtained from search_ads.\n"
+    "- get_user: fetch a seller's public profile (pro/private, ratings, number of ads).\n"
+    "- list_categories / list_regions / list_departments: enumerate the exact enum "
+    "values accepted by search_ads. Call these first when unsure about a category, "
+    "region or department name.\n\n"
+    "Guidance:\n"
+    "- Location can be set three ways: a city point (latitude + longitude + radius), "
+    "a region name, or a department name. City coordinates and region/department can be "
+    "combined; if you only know a city name without coordinates, prefer its department "
+    "or region.\n"
+    "- Enum-like parameters (category, region, department, sort, ad_type, owner_type) are "
+    "case-insensitive but must match a known value, otherwise the call fails with an "
+    "explicit error listing the valid options.\n"
+    "- Prices are in euros. Results default to newest first."
 ))
 
 _client = lbc.Client()
@@ -129,29 +145,52 @@ def search_ads(
     page: int = 1,
     limit: int = 10,
 ) -> dict:
-    """Search for ads on Leboncoin.
+    """Search for classified ads on Leboncoin and return a paginated list of results.
+
+    This is the primary discovery tool. It returns, for each ad, its id (usable with
+    get_ad), title, price in euros, location, seller type, a short body and images.
+    The response also includes total match counts and the number of available pages.
+
+    Location can be specified in three interchangeable ways:
+      - a city point: latitude + longitude (+ optional radius in meters);
+      - a region name (see list_regions);
+      - a department name (see list_departments).
+    City coordinates can be combined with a region or department.
 
     Args:
-        text: Search query (e.g. "vélo électrique", "appartement 3 pièces").
-        url: Full Leboncoin search URL. Overrides text/category/location params.
-        category: Category name like VEHICULES, IMMOBILIER, ELECTRONIQUE, LOISIRS, MODE, etc.
-            Full list: TOUTES_CATEGORIES, EMPLOI, VEHICULES, VEHICULES_VOITURES, VEHICULES_MOTOS,
-            IMMOBILIER, IMMOBILIER_VENTES_IMMOBILIERES, IMMOBILIER_LOCATIONS, ELECTRONIQUE,
-            MAISON_ET_JARDIN, MODE, LOISIRS, ANIMAUX, SERVICES, DONS, DIVERS.
-        city: City name (informational, used with lat/lng).
-        latitude: Latitude for location search.
-        longitude: Longitude for location search.
-        radius: Search radius in meters (default 30000 = 30km).
-        region: Region name (e.g. ILE_DE_FRANCE, BRETAGNE, PROVENCE_ALPES_COTE_D_AZUR).
-        department: Department name (e.g. PARIS, GIRONDE, BOUCHES_DU_RHONE).
-        price_min: Minimum price in euros.
-        price_max: Maximum price in euros.
-        sort: Sort order: NEWEST, OLDEST, CHEAPEST, EXPENSIVE, RELEVANCE.
-        ad_type: OFFER or DEMAND.
-        owner_type: PRO, PRIVATE, or ALL.
-        shippable: Filter for shippable items only.
-        page: Page number (starts at 1).
-        limit: Results per page (max 35).
+        text: Free-text search query (e.g. "vélo électrique", "appartement 3 pièces").
+        url: Full Leboncoin search URL copied from the website. When provided, it takes
+            precedence over text, category and location parameters.
+        category: Category enum name. Case-insensitive. Common values: VEHICULES,
+            IMMOBILIER, ELECTRONIQUE, LOISIRS, MODE, MAISON_ET_JARDIN, ANIMAUX, SERVICES.
+            Full list: TOUTES_CATEGORIES, EMPLOI, VEHICULES, VEHICULES_VOITURES,
+            VEHICULES_MOTOS, IMMOBILIER, IMMOBILIER_VENTES_IMMOBILIERES,
+            IMMOBILIER_LOCATIONS, ELECTRONIQUE, MAISON_ET_JARDIN, MODE, LOISIRS, ANIMAUX,
+            SERVICES, DONS, DIVERS. Call list_categories() to enumerate every value.
+        city: City name. Informational label only; on its own it does NOT filter results
+            unless accompanied by latitude/longitude.
+        latitude: Latitude of the search center. Must be paired with longitude.
+        longitude: Longitude of the search center. Must be paired with latitude.
+        radius: Search radius around the city point, in meters (default 30000 = 30 km).
+        region: Region enum name, e.g. ILE_DE_FRANCE, BRETAGNE,
+            PROVENCE_ALPES_COTE_D_AZUR. Case-insensitive. Call list_regions() for the full list.
+        department: Department enum name, e.g. PARIS, GIRONDE, BOUCHES_DU_RHONE.
+            Case-insensitive. Call list_departments() for the full list.
+        price_min: Minimum price in euros (inclusive).
+        price_max: Maximum price in euros (inclusive).
+        sort: Result ordering. One of NEWEST (default), OLDEST, CHEAPEST, EXPENSIVE,
+            RELEVANCE.
+        ad_type: OFFER (someone selling, default) or DEMAND (someone looking to buy).
+        owner_type: Restrict by seller type: PRO (professional), PRIVATE (individual),
+            or ALL. Defaults to all sellers when omitted.
+        shippable: If True, only return items that can be shipped (as opposed to
+            pickup-only).
+        page: 1-based page number to retrieve.
+        limit: Number of results per page (max 35, values above are capped).
+
+    Returns:
+        A dict with total, total_pro, total_private, max_pages, the current page and an
+        "ads" list. Use an ad's "id" with get_ad for full details.
     """
     kwargs = {}
 
@@ -215,10 +254,20 @@ def search_ads(
 
 @mcp.tool()
 def get_ad(ad_id: str) -> dict:
-    """Get detailed information about a specific Leboncoin ad.
+    """Fetch the full detail of a single Leboncoin ad by its id.
+
+    Use this after search_ads to get everything about one listing: title, price,
+    complete description body, all category-specific attributes (brand, mileage,
+    surface area, etc.), every image URL, location and the number of times it was
+    favorited.
 
     Args:
-        ad_id: The Leboncoin ad ID (numeric string from the ad URL).
+        ad_id: The numeric Leboncoin ad id (the trailing number in an ad URL, also
+            returned as "id" by search_ads).
+
+    Returns:
+        A dict describing the ad, including an "attributes" mapping and a "favorites"
+        count. Raises if the ad does not exist or is no longer online.
     """
     try:
         ad = _client.get_ad(ad_id)
@@ -232,10 +281,19 @@ def get_ad(ad_id: str) -> dict:
 
 @mcp.tool()
 def get_user(user_id: str) -> dict:
-    """Get information about a Leboncoin user/seller.
+    """Fetch a Leboncoin seller's public profile by user id.
+
+    Use this to assess a seller found via search_ads or get_ad: whether they are a
+    professional or a private individual, when they registered, how many ads they have
+    online, their rating/feedback and, for pros, their store and business details.
 
     Args:
-        user_id: The Leboncoin user ID (UUID format).
+        user_id: The Leboncoin user id in UUID format (as returned by get_ad).
+
+    Returns:
+        A dict with the profile (name, is_pro, account_type, registered_at, total_ads),
+        optional feedback_score/feedback_count and, for professionals, a "pro_info"
+        block. Raises if the user cannot be found.
     """
     try:
         user = _client.get_user(user_id)
@@ -247,19 +305,39 @@ def get_user(user_id: str) -> dict:
 
 @mcp.tool()
 def list_categories() -> dict:
-    """List all available Leboncoin categories and their names."""
+    """List every Leboncoin category accepted by search_ads.
+
+    Call this when you are unsure which category name to pass to search_ads' `category`
+    parameter.
+
+    Returns:
+        A mapping of category enum name (the value to pass to search_ads) to its numeric
+        Leboncoin id.
+    """
     return {item.name: item.value for item in lbc.Category}
 
 
 @mcp.tool()
 def list_regions() -> list[str]:
-    """List all available French regions for location filtering."""
+    """List every French region name accepted by search_ads' `region` parameter.
+
+    Call this to resolve a location to a valid region enum value before searching.
+
+    Returns:
+        A list of region enum names (e.g. ILE_DE_FRANCE, BRETAGNE).
+    """
     return [item.name for item in lbc.Region]
 
 
 @mcp.tool()
 def list_departments() -> list[str]:
-    """List all available French departments for location filtering."""
+    """List every French department name accepted by search_ads' `department` parameter.
+
+    Call this to resolve a location to a valid department enum value before searching.
+
+    Returns:
+        A list of department enum names (e.g. PARIS, GIRONDE, BOUCHES_DU_RHONE).
+    """
     return [item.name for item in lbc.Department]
 
 
