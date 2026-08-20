@@ -1,8 +1,11 @@
-from dataclasses import asdict, fields
+import logging
 from typing import Optional
 
 import lbc
 from fastmcp import FastMCP
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("leboncoin-mcp")
 
 mcp = FastMCP("leboncoin", instructions=(
     "MCP server for searching Leboncoin (French classifieds). "
@@ -93,10 +96,16 @@ def _build_location(
             radius=radius or 30_000,
             city=city or "",
         ))
-    if region and region.upper() in REGION_MAP:
-        locations.append(REGION_MAP[region.upper()])
-    if department and department.upper() in DEPARTMENT_MAP:
-        locations.append(DEPARTMENT_MAP[department.upper()])
+    if region:
+        region_key = region.upper()
+        if region_key not in REGION_MAP:
+            raise ValueError(f"Unknown region '{region}'. Use list_regions() to see valid options.")
+        locations.append(REGION_MAP[region_key])
+    if department:
+        department_key = department.upper()
+        if department_key not in DEPARTMENT_MAP:
+            raise ValueError(f"Unknown department '{department}'. Use list_departments() to see valid options.")
+        locations.append(DEPARTMENT_MAP[department_key])
     return locations or None
 
 
@@ -151,8 +160,11 @@ def search_ads(
     else:
         if text:
             kwargs["text"] = text
-        if category and category.upper() in CATEGORY_MAP:
-            kwargs["category"] = CATEGORY_MAP[category.upper()]
+        if category:
+            category_key = category.upper()
+            if category_key not in CATEGORY_MAP:
+                raise ValueError(f"Unknown category '{category}'. Use list_categories() to see valid options.")
+            kwargs["category"] = CATEGORY_MAP[category_key]
 
         locations = _build_location(city, latitude, longitude, radius, region, department)
         if locations:
@@ -164,17 +176,32 @@ def search_ads(
     if price:
         kwargs["price"] = price
 
-    kwargs["sort"] = SORT_MAP.get(sort.upper(), lbc.Sort.NEWEST)
-    kwargs["ad_type"] = AD_TYPE_MAP.get(ad_type.upper(), lbc.AdType.OFFER)
-    if owner_type and owner_type.upper() in OWNER_TYPE_MAP:
-        kwargs["owner_type"] = OWNER_TYPE_MAP[owner_type.upper()]
+    sort_key = sort.upper()
+    if sort_key not in SORT_MAP:
+        raise ValueError(f"Unknown sort '{sort}'. Valid options: {', '.join(SORT_MAP)}.")
+    kwargs["sort"] = SORT_MAP[sort_key]
+
+    ad_type_key = ad_type.upper()
+    if ad_type_key not in AD_TYPE_MAP:
+        raise ValueError(f"Unknown ad_type '{ad_type}'. Valid options: {', '.join(AD_TYPE_MAP)}.")
+    kwargs["ad_type"] = AD_TYPE_MAP[ad_type_key]
+
+    if owner_type:
+        owner_type_key = owner_type.upper()
+        if owner_type_key not in OWNER_TYPE_MAP:
+            raise ValueError(f"Unknown owner_type '{owner_type}'. Valid options: {', '.join(OWNER_TYPE_MAP)}.")
+        kwargs["owner_type"] = OWNER_TYPE_MAP[owner_type_key]
     if shippable is not None:
         kwargs["shippable"] = shippable
     kwargs["page"] = page
     kwargs["limit"] = min(limit, 35)
-    kwargs["limit_alu"] = 0
+    kwargs["limit_alu"] = 0  # désactive les annonces sponsorisées ("à la une")
 
-    result = _client.search(**kwargs)
+    try:
+        result = _client.search(**kwargs)
+    except Exception as exc:
+        logger.exception("search_ads failed with kwargs=%s", kwargs)
+        raise RuntimeError(f"Leboncoin search failed: {exc}") from exc
 
     return {
         "total": result.total,
@@ -193,7 +220,11 @@ def get_ad(ad_id: str) -> dict:
     Args:
         ad_id: The Leboncoin ad ID (numeric string from the ad URL).
     """
-    ad = _client.get_ad(ad_id)
+    try:
+        ad = _client.get_ad(ad_id)
+    except Exception as exc:
+        logger.exception("get_ad failed for ad_id=%s", ad_id)
+        raise RuntimeError(f"Could not retrieve ad '{ad_id}': {exc}") from exc
     result = _ad_to_dict(ad)
     result["favorites"] = ad.favorites
     return result
@@ -206,7 +237,11 @@ def get_user(user_id: str) -> dict:
     Args:
         user_id: The Leboncoin user ID (UUID format).
     """
-    user = _client.get_user(user_id)
+    try:
+        user = _client.get_user(user_id)
+    except Exception as exc:
+        logger.exception("get_user failed for user_id=%s", user_id)
+        raise RuntimeError(f"Could not retrieve user '{user_id}': {exc}") from exc
     return _user_to_dict(user)
 
 
