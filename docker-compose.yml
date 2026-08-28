@@ -1,0 +1,11 @@
+services:
+  leboncoin-mcp:
+    build: .
+    image: leboncoin-mcp
+    container_name: leboncoin-mcp
+    # Par défaut le serveur tourne en SSE pour être exploitable via docker compose up.
+    # Pour du stdio ponctuel : docker compose run --rm leboncoin-mcp python src/server.py
+    command: ["--sse", "--port=3001"]
+    ports:
+      - "3001:3001"
+    restart: unless-stopped

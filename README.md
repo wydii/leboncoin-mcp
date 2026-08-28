@@ -35,7 +35,7 @@ pip install -r requirements.txt
 ### Transport stdio (par défaut)
 
 ```bash
-python server.py
+python src/server.py
 ```
 
 C'est le mode utilisé par les clients MCP comme Cursor, Claude Desktop, etc.
@@ -43,9 +43,24 @@ C'est le mode utilisé par les clients MCP comme Cursor, Claude Desktop, etc.
 ### Transport SSE (HTTP)
 
 ```bash
-python server.py --sse              # port 3001 par défaut
-python server.py --sse --port=8080  # port personnalisé
+python src/server.py --sse              # port 3001 par défaut
+python src/server.py --sse --port=8080  # port personnalisé
 ```
+
+### Docker
+
+```bash
+docker build -t leboncoin-mcp .
+docker run -i --rm leboncoin-mcp          # stdio
+```
+
+### Docker Compose (transport SSE)
+
+```bash
+docker compose up -d --build
+```
+
+Le serveur est alors joignable sur `http://localhost:3001/sse`. Arrêt : `docker compose down`.
 
 ## Configuration dans Cursor
 
@@ -56,7 +71,7 @@ Ajoutez ceci dans votre configuration MCP (`.cursor/mcp.json`) :
   "mcpServers": {
     "leboncoin": {
       "command": "python",
-      "args": ["/chemin/vers/leboncoin-mcp/server.py"]
+      "args": ["/chemin/vers/leboncoin-mcp/src/server.py"]
     }
   }
 }
