@@ -113,7 +113,7 @@ def search_ads(
     department: Optional[str] = None,
     price_min: Optional[int] = None,
     price_max: Optional[int] = None,
-    sort: str = "NEWEST",
+    sort: str = "RELEVANCE",
     ad_type: str = "OFFER",
     owner_type: Optional[str] = None,
     shippable: Optional[bool] = None,
@@ -137,7 +137,7 @@ def search_ads(
         department: Department name (e.g. PARIS, GIRONDE, BOUCHES_DU_RHONE).
         price_min: Minimum price in euros.
         price_max: Maximum price in euros.
-        sort: Sort order: NEWEST, OLDEST, CHEAPEST, EXPENSIVE, RELEVANCE.
+        sort: Sort order: RELEVANCE (default), NEWEST, OLDEST, CHEAPEST, EXPENSIVE.
         ad_type: OFFER or DEMAND.
         owner_type: PRO, PRIVATE, or ALL.
         shippable: Filter for shippable items only.
@@ -164,7 +164,7 @@ def search_ads(
     if price:
         kwargs["price"] = price
 
-    kwargs["sort"] = SORT_MAP.get(sort.upper(), lbc.Sort.NEWEST)
+    kwargs["sort"] = SORT_MAP.get(sort.upper(), lbc.Sort.RELEVANCE)
     kwargs["ad_type"] = AD_TYPE_MAP.get(ad_type.upper(), lbc.AdType.OFFER)
     if owner_type and owner_type.upper() in OWNER_TYPE_MAP:
         kwargs["owner_type"] = OWNER_TYPE_MAP[owner_type.upper()]
