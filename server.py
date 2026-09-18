@@ -1,3 +1,6 @@
+import json
+import urllib.parse
+import urllib.request
 from dataclasses import asdict, fields
 from typing import Optional
 
@@ -77,6 +80,35 @@ def _user_to_dict(user: lbc.User) -> dict:
     return result
 
 
+_geocode_cache: dict[str, Optional[tuple]] = {}
+
+
+def _geocode(city: str) -> Optional[tuple[float, float]]:
+    """Resolve a city name to (lat, lng) via the French government address API.
+
+    Free, no API key, no rate limit for light use. Returns None if not found.
+    """
+    key = city.strip().lower()
+    if key in _geocode_cache:
+        return _geocode_cache[key]
+
+    url = "https://api-adresse.data.gouv.fr/search/?" + urllib.parse.urlencode(
+        {"q": city, "type": "municipality", "limit": 1}
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            features = json.load(response).get("features") or []
+    except Exception:
+        features = []
+
+    result = None
+    if features:
+        lng, lat = features[0]["geometry"]["coordinates"]
+        result = (lat, lng)
+    _geocode_cache[key] = result
+    return result
+
+
 def _build_location(
     city: Optional[str],
     latitude: Optional[float],
@@ -86,6 +118,10 @@ def _build_location(
     department: Optional[str],
 ) -> list | None:
     locations = []
+    if latitude is None and longitude is None and city:
+        geocoded = _geocode(city)
+        if geocoded:
+            latitude, longitude = geocoded
     if latitude is not None and longitude is not None:
         locations.append(lbc.City(
             lat=latitude,
@@ -129,7 +165,7 @@ def search_ads(
             Full list: TOUTES_CATEGORIES, EMPLOI, VEHICULES, VEHICULES_VOITURES, VEHICULES_MOTOS,
             IMMOBILIER, IMMOBILIER_VENTES_IMMOBILIERES, IMMOBILIER_LOCATIONS, ELECTRONIQUE,
             MAISON_ET_JARDIN, MODE, LOISIRS, ANIMAUX, SERVICES, DONS, DIVERS.
-        city: City name (informational, used with lat/lng).
+        city: City name. Geocoded automatically; pass latitude/longitude to override.
         latitude: Latitude for location search.
         longitude: Longitude for location search.
         radius: Search radius in meters (default 30000 = 30km).
