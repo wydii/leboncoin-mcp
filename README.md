@@ -47,6 +47,8 @@ python server.py --sse              # port 3001 par défaut
 python server.py --sse --port=8080  # port personnalisé
 ```
 
+Le serveur SSE n'écoute que sur `127.0.0.1` : l'endpoint n'a pas d'authentification.
+
 ## Configuration dans Cursor
 
 Ajoutez ceci dans votre configuration MCP (`.cursor/mcp.json`) :
@@ -78,22 +80,26 @@ Une fois le serveur connecté à votre assistant IA, vous pouvez lui demander :
 | Paramètre | Type | Description |
 |-----------|------|-------------|
 | `text` | string | Texte de recherche |
-| `url` | string | URL Leboncoin complète (remplace text/category/location) |
+| `url` | string | URL de recherche Leboncoin copiée depuis le navigateur (remplace tous les autres filtres, seuls `page` et `limit` s'appliquent) |
 | `category` | string | Catégorie (`VEHICULES`, `IMMOBILIER`, `ELECTRONIQUE`, `LOISIRS`, `MODE`…) |
-| `city` | string | Nom de ville (informatif, utilisé avec lat/lng) |
-| `latitude` | float | Latitude |
+| `city` | string | Ville française, éventuellement avec son code postal (`Toulouse`, `Saint-Jean 31240`). Géocodée automatiquement si `latitude`/`longitude` sont absents |
+| `latitude` | float | Latitude (prioritaire sur le géocodage de `city`) |
 | `longitude` | float | Longitude |
-| `radius` | int | Rayon en mètres (défaut : 30 000 = 30 km) |
-| `region` | string | Région (`ILE_DE_FRANCE`, `BRETAGNE`, `PROVENCE_ALPES_COTE_D_AZUR`…) |
-| `department` | string | Département (`PARIS`, `GIRONDE`, `BOUCHES_DU_RHONE`…) |
+| `radius` | int | Rayon en mètres autour de la ville ou du point (défaut : 30 000 = 30 km) |
+| `region` | string | Région (`ILE_DE_FRANCE`, `Île-de-France`, `OCCITANIE`…) |
+| `department` | string | Département, par nom ou numéro (`PARIS`, `Haute-Garonne`, `31`…) |
 | `price_min` | int | Prix minimum en euros |
 | `price_max` | int | Prix maximum en euros |
-| `sort` | string | Tri : `NEWEST`, `OLDEST`, `CHEAPEST`, `EXPENSIVE`, `RELEVANCE` |
+| `sort` | string | Tri : `RELEVANCE` (défaut), `NEWEST`, `OLDEST`, `CHEAPEST`, `EXPENSIVE` |
 | `ad_type` | string | `OFFER` ou `DEMAND` |
 | `owner_type` | string | `PRO`, `PRIVATE` ou `ALL` |
 | `shippable` | bool | Filtrer les articles livrables uniquement |
 | `page` | int | Numéro de page (à partir de 1) |
-| `limit` | int | Résultats par page (max 35) |
+| `limit` | int | Résultats par page (1 à 35) |
+
+Une ville, une catégorie, une région, un département ou un tri inconnu renvoie une erreur explicite au lieu d'être ignoré. Quand une localisation est appliquée, la réponse la décrit dans `applied_location` (ville retenue par le géocodage, coordonnées, rayon). Chaque annonce renvoyée contient `seller` (`id`, `name`, `type`), dont l'`id` sert à `get_user`.
+
+Le géocodage des villes passe par le service de l'IGN ([Géoplateforme](https://cartes.gouv.fr/aide/fr/guides-utilisateur/utiliser-les-services-de-la-geoplateforme/geocodage/)), avec repli sur [api-adresse.data.gouv.fr](https://adresse.data.gouv.fr/) : gratuit, sans clé, seul le nom de la ville est envoyé.
 
 ### `get_ad`
 
@@ -105,7 +111,7 @@ Une fois le serveur connecté à votre assistant IA, vous pouvez lui demander :
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `user_id` | string | ID utilisateur (format UUID) |
+| `user_id` | string | ID du vendeur (UUID), renvoyé dans `seller.id` par `search_ads` et `get_ad` |
 
 ### `list_categories` / `list_regions` / `list_departments`
 
@@ -113,8 +119,8 @@ Aucun paramètre requis.
 
 ## Dépendances
 
-- [lbc](https://github.com/etienne-hd/lbc) >= 1.1.2 — Client Python pour Leboncoin
-- [FastMCP](https://github.com/jlowin/fastmcp) >= 3.2.0 — Framework pour serveurs MCP en Python
+- [lbc](https://github.com/etienne-hd/lbc) >= 1.1.9, < 2 — Client Python pour Leboncoin
+- [FastMCP](https://github.com/jlowin/fastmcp) >= 3.2.0, < 5 — Framework pour serveurs MCP en Python
 
 ## Licence
 
